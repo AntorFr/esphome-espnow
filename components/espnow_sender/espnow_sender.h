@@ -1,6 +1,8 @@
 #pragma once
 
+#include "esphome/core/automation.h"
 #include "esphome/core/component.h"
+#include "esphome/core/helpers.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include <esp_now.h>
 
@@ -40,6 +42,21 @@ class ESPNowSenderComponent : public Component {
   void set_action(ESPNowSendAction action) { configured_action_ = action; }
   void set_binary_sensor(binary_sensor::BinarySensor *bs);
 
+  /// [Feature 1] Optional external connectivity sensor.
+  /// If set, check_connectivity_() delegates to this sensor's state
+  /// instead of polling network::is_connected() + api_server.
+  void set_connectivity_sensor(binary_sensor::BinarySensor *sensor) {
+    connectivity_sensor_ = sensor;
+  }
+
+  /// [Feature 2] Register callbacks for fallback enter/exit transitions.
+  void add_on_fallback_enter_callback(std::function<void()> cb) {
+    fallback_enter_callback_.add(std::move(cb));
+  }
+  void add_on_fallback_exit_callback(std::function<void()> cb) {
+    fallback_exit_callback_.add(std::move(cb));
+  }
+
   /// Call from YAML lambda (e.g. button on_press) to trigger an ESP-NOW send
   /// when in fallback mode. In normal mode this is a no-op (HA handles it).
   void send_command(bool state);
@@ -55,11 +72,31 @@ class ESPNowSenderComponent : public Component {
   uint32_t recovery_timeout_ms_{10000};
   ESPNowSendAction configured_action_{ESPNowSendAction::ACTION_TOGGLE};
   binary_sensor::BinarySensor *binary_sensor_{nullptr};
+  binary_sensor::BinarySensor *connectivity_sensor_{nullptr};  // Feature 1
 
   FallbackState state_{FallbackState::NORMAL};
   uint32_t state_change_time_{0};
 
   bool last_sensor_state_{false};
+
+  CallbackManager<void()> fallback_enter_callback_{};  // Feature 2
+  CallbackManager<void()> fallback_exit_callback_{};   // Feature 2
+};
+
+// ── Automation Trigger classes (Feature 2) ─────────────────────────────────
+
+class FallbackEnterTrigger : public Trigger<> {
+ public:
+  explicit FallbackEnterTrigger(ESPNowSenderComponent *parent) {
+    parent->add_on_fallback_enter_callback([this]() { this->trigger(); });
+  }
+};
+
+class FallbackExitTrigger : public Trigger<> {
+ public:
+  explicit FallbackExitTrigger(ESPNowSenderComponent *parent) {
+    parent->add_on_fallback_exit_callback([this]() { this->trigger(); });
+  }
 };
 
 }  // namespace espnow_sender

@@ -51,12 +51,20 @@ void ESPNowSenderComponent::set_binary_sensor(binary_sensor::BinarySensor *bs) {
   bs->add_on_state_callback([this](bool state) {
     last_sensor_state_ = state;
     if (state_ == FallbackState::FALLBACK) {
-      this->send_command(state);
+      // [Fix 3] For mirror_state send on both edges; for all other actions
+      // (toggle/on/off) only send on the rising edge to avoid double-triggers.
+      if (configured_action_ == ACTION_MIRROR_STATE || state) {
+        this->send_command(state);
+      }
     }
   });
 }
 
 bool ESPNowSenderComponent::check_connectivity_() {
+  // [Feature 1] If an external connectivity sensor is configured, delegate to it.
+  if (connectivity_sensor_ != nullptr) {
+    return connectivity_sensor_->state;
+  }
   bool connected = network::is_connected();
 #ifdef USE_API
   if (connected && api::global_api_server != nullptr) {
@@ -87,6 +95,7 @@ void ESPNowSenderComponent::loop() {
       } else if (now - state_change_time_ >= fallback_timeout_ms_) {
         state_ = FallbackState::FALLBACK;
         ESP_LOGI(TAG, "Entering ESP-NOW fallback mode");
+        this->fallback_enter_callback_.call();  // [Feature 2]
       }
       break;
 
@@ -106,6 +115,7 @@ void ESPNowSenderComponent::loop() {
       } else if (now - state_change_time_ >= recovery_timeout_ms_) {
         state_ = FallbackState::NORMAL;
         ESP_LOGI(TAG, "Leaving ESP-NOW fallback mode, HA resumed");
+        this->fallback_exit_callback_.call();  // [Feature 2]
       }
       break;
   }

@@ -33,8 +33,15 @@ external_components:
       path: ../components
     components: [espnow_sender]
 
-# ── Button GPIO ────────────────────────────────────────────────────────────────
+# ── Connectivity sensor (source-of-truth avec delayed_off) ────────────────────
 binary_sensor:
+  - platform: status
+    id: api_connected
+    name: "API Connected"
+    filters:
+      - delayed_off: 30s
+
+  # ── Button GPIO ──────────────────────────────────────────────────────────────
   - platform: gpio
     id: my_button
     pin:
@@ -44,20 +51,22 @@ binary_sensor:
         pullup: true
       inverted: true
     name: "Button"
-    # In normal mode, HA will handle automation (button → HA → light).
-    # In fallback mode, the on_press below triggers ESP-NOW directly.
+    filters:
+      - delayed_on: 10ms
     on_press:
       then:
-        - lambda: |-
-            id(espnow_tx).send_command(true);
+        - lambda: id(espnow_tx).send_command(true);
 
 # ── ESP-NOW sender ─────────────────────────────────────────────────────────────
 espnow_sender:
   id: espnow_tx
   peer_mac: ${light_mac}
-  # Optional: wire the binary_sensor so state changes auto-trigger ESP-NOW.
-  # Useful when action: mirror_state — the sender reacts to every state change.
-  binary_sensor_id: my_button
-  fallback_timeout: 30s   # delay before entering fallback after connectivity loss
-  recovery_timeout: 10s   # delay before leaving fallback after connectivity restore
-  action: toggle          # toggle | on | off | mirror_state
+  # Délègue la détection à api_connected plutôt qu'au check interne
+  connectivity_sensor_id: api_connected
+  fallback_timeout: 30s
+  recovery_timeout: 10s
+  action: toggle
+  on_fallback_enter:
+    - logger.log: "ESP-NOW fallback: HA unreachable, using direct control"
+  on_fallback_exit:
+    - logger.log: "ESP-NOW fallback: HA restored, reverting to normal mode"

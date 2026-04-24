@@ -1,7 +1,8 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
+from esphome import automation
 from esphome.components import binary_sensor
-from esphome.const import CONF_ID
+from esphome.const import CONF_ID, CONF_TRIGGER_ID
 
 CODEOWNERS = ["@esphome-espnow"]
 
@@ -11,12 +12,21 @@ espnow_sender_ns = cg.esphome_ns.namespace("espnow_sender")
 ESPNowSenderComponent = espnow_sender_ns.class_(
     "ESPNowSenderComponent", cg.Component
 )
+FallbackEnterTrigger = espnow_sender_ns.class_(
+    "FallbackEnterTrigger", automation.Trigger.template()
+)
+FallbackExitTrigger = espnow_sender_ns.class_(
+    "FallbackExitTrigger", automation.Trigger.template()
+)
 
 CONF_PEER_MAC = "peer_mac"
 CONF_FALLBACK_TIMEOUT = "fallback_timeout"
 CONF_RECOVERY_TIMEOUT = "recovery_timeout"
 CONF_ACTION = "action"
 CONF_BINARY_SENSOR_ID = "binary_sensor_id"
+CONF_CONNECTIVITY_SENSOR_ID = "connectivity_sensor_id"
+CONF_ON_FALLBACK_ENTER = "on_fallback_enter"
+CONF_ON_FALLBACK_EXIT = "on_fallback_exit"
 
 ESPNowSendAction = espnow_sender_ns.enum("ESPNowSendAction")
 ACTION_OPTIONS = {
@@ -50,6 +60,15 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_RECOVERY_TIMEOUT, default="10s"): cv.positive_time_period_milliseconds,
         cv.Optional(CONF_ACTION, default="toggle"): cv.enum(ACTION_OPTIONS, lower=True),
         cv.Optional(CONF_BINARY_SENSOR_ID): cv.use_id(binary_sensor.BinarySensor),
+        # Feature 1 — delegate connectivity detection to an existing binary_sensor
+        cv.Optional(CONF_CONNECTIVITY_SENSOR_ID): cv.use_id(binary_sensor.BinarySensor),
+        # Feature 2 — automation triggers on fallback state changes
+        cv.Optional(CONF_ON_FALLBACK_ENTER): automation.validate_automation(
+            {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(FallbackEnterTrigger)}
+        ),
+        cv.Optional(CONF_ON_FALLBACK_EXIT): automation.validate_automation(
+            {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(FallbackExitTrigger)}
+        ),
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -69,3 +88,15 @@ async def to_code(config):
     if CONF_BINARY_SENSOR_ID in config:
         bs_var = await cg.get_variable(config[CONF_BINARY_SENSOR_ID])
         cg.add(var.set_binary_sensor(bs_var))
+
+    if CONF_CONNECTIVITY_SENSOR_ID in config:
+        cs_var = await cg.get_variable(config[CONF_CONNECTIVITY_SENSOR_ID])
+        cg.add(var.set_connectivity_sensor(cs_var))
+
+    for conf in config.get(CONF_ON_FALLBACK_ENTER, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [], conf)
+
+    for conf in config.get(CONF_ON_FALLBACK_EXIT, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [], conf)
