@@ -1,0 +1,61 @@
+## Exemple — Module ampoule monochrome (LED PWM)
+##
+## Contrôle une ampoule monochrome via LEDC (PWM).
+## ESP-NOW toujours actif, actions ON/OFF/TOGGLE appliquées directement.
+
+substitutions:
+  device_name: ampoule-salon
+  # Adresse MAC WiFi du module bouton (sender).
+  button_mac: "11:22:33:44:55:66"
+
+esphome:
+  name: ${device_name}
+  friendly_name: Ampoule Salon
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [espnow_receiver]
+
+# ── Sortie PWM ─────────────────────────────────────────────────────────────────
+output:
+  - platform: ledc
+    id: light_output
+    pin: GPIO2
+    frequency: 1000Hz
+
+# ── Lumière monochrome ─────────────────────────────────────────────────────────
+light:
+  - platform: monochromatic
+    id: my_light
+    name: "Ampoule Salon"
+    output: light_output
+    default_transition_length: 500ms
+    restore_mode: RESTORE_DEFAULT_OFF
+
+# ── ESP-NOW receiver ───────────────────────────────────────────────────────────
+espnow_receiver:
+  id: espnow_rx
+  # Filtre : n'accepte que les paquets venant de ce MAC
+  peer_mac: ${button_mac}
+  light_id: my_light

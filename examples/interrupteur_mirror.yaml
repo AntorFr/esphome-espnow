@@ -1,0 +1,69 @@
+## Exemple — Module bouton avec action MIRROR_STATE
+##
+## Scénario : le bouton est un interrupteur bipolaire (ON/OFF physique).
+##   - Mode normal  : état du binary_sensor publié → HA → ampoule
+##   - Mode fallback: chaque changement d'état → ESP-NOW → ampoule ON/OFF
+##
+## Avec binary_sensor_id câblé et action: mirror_state, l'envoi ESP-NOW
+## se déclenche automatiquement sur chaque front (pas besoin de lambda).
+
+substitutions:
+  device_name: interrupteur-chambre
+  light_mac: "AA:BB:CC:DD:EE:FF"
+
+esphome:
+  name: ${device_name}
+  friendly_name: Interrupteur Chambre
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [espnow_sender]
+
+# ── Interrupteur GPIO ──────────────────────────────────────────────────────────
+binary_sensor:
+  - platform: gpio
+    id: my_switch
+    pin:
+      number: GPIO4
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    name: "Interrupteur Chambre"
+    filters:
+      - delayed_on_off: 20ms   # anti-rebond bipolaire
+
+# ── ESP-NOW sender ─────────────────────────────────────────────────────────────
+espnow_sender:
+  id: espnow_tx
+  peer_mac: ${light_mac}
+  fallback_timeout: 20s
+  recovery_timeout: 15s
+
+  # mirror_state : ON physique → allume, OFF physique → éteint
+  action: mirror_state
+
+  # Câblage automatique : chaque changement d'état du binary_sensor
+  # déclenche send_command() si on est en mode fallback
+  binary_sensor_id: my_switch

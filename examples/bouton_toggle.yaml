@@ -1,0 +1,90 @@
+## Exemple — Module bouton avec action TOGGLE (défaut)
+##
+## Scénario : appui bouton → toggle ampoule
+##   - Mode normal  : bouton → HA → ampoule  (via automation HA)
+##   - Mode fallback: bouton → ESP-NOW → ampoule  (si WiFi ou API HA absent)
+##
+## Matériel : n'importe quel ESP32, bouton sur GPIO0 (strapping pin pratique
+##            pour les dev kits — à changer sur une carte finale)
+
+substitutions:
+  device_name: bouton-salon
+  # Adresse MAC WiFi du module ampoule.
+  # À récupérer dans les logs : [I][wifi] WiFi MAC Address: XX:XX:XX:XX:XX:XX
+  light_mac: "AA:BB:CC:DD:EE:FF"
+
+esphome:
+  name: ${device_name}
+  friendly_name: Bouton Salon
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # Optionnel : AP de secours si le réseau principal est down
+  ap:
+    ssid: "${device_name} AP"
+    password: !secret ap_password
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: DEBUG  # passer à INFO en production
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [espnow_sender]
+
+# ── Bouton GPIO ────────────────────────────────────────────────────────────────
+binary_sensor:
+  - platform: gpio
+    id: my_button
+    pin:
+      number: GPIO0
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    name: "Bouton Salon"
+    filters:
+      - delayed_on: 10ms   # anti-rebond
+    on_press:
+      then:
+        # send_command() est un no-op si on est en mode normal.
+        # En mode fallback il envoie la commande configurée (toggle ici).
+        - lambda: id(espnow_tx).send_command(true);
+
+# ── LED de statut (optionnel) ─────────────────────────────────────────────────
+status_led:
+  pin:
+    number: GPIO2
+    inverted: false
+
+# ── ESP-NOW sender ─────────────────────────────────────────────────────────────
+espnow_sender:
+  id: espnow_tx
+  peer_mac: ${light_mac}
+
+  # Temps sans WiFi/API avant de basculer en fallback ESP-NOW
+  fallback_timeout: 30s
+
+  # Temps de connectivité stable avant de revenir en mode normal
+  recovery_timeout: 10s
+
+  # Action envoyée à l'ampoule lors d'un send_command()
+  action: toggle
+
+  # binary_sensor_id est optionnel ici car on utilise on_press + lambda.
+  # Utile principalement avec action: mirror_state.

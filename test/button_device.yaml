@@ -1,0 +1,63 @@
+substitutions:
+  device_name: button-device
+  # MAC address of the light ESP32 (receiver).
+  # Run `esphome logs light_device.yaml` and look for "WiFi MAC Address: xx:xx:xx:xx:xx:xx"
+  light_mac: "AA:BB:CC:DD:EE:FF"
+
+esphome:
+  name: ${device_name}
+  friendly_name: Button Device
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [espnow_sender]
+
+# ── Button GPIO ────────────────────────────────────────────────────────────────
+binary_sensor:
+  - platform: gpio
+    id: my_button
+    pin:
+      number: GPIO0
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    name: "Button"
+    # In normal mode, HA will handle automation (button → HA → light).
+    # In fallback mode, the on_press below triggers ESP-NOW directly.
+    on_press:
+      then:
+        - lambda: |-
+            id(espnow_tx).send_command(true);
+
+# ── ESP-NOW sender ─────────────────────────────────────────────────────────────
+espnow_sender:
+  id: espnow_tx
+  peer_mac: ${light_mac}
+  # Optional: wire the binary_sensor so state changes auto-trigger ESP-NOW.
+  # Useful when action: mirror_state — the sender reacts to every state change.
+  binary_sensor_id: my_button
+  fallback_timeout: 30s   # delay before entering fallback after connectivity loss
+  recovery_timeout: 10s   # delay before leaving fallback after connectivity restore
+  action: toggle          # toggle | on | off | mirror_state

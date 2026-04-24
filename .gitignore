@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# ESPHome build artifacts
+.esphome/
+test/.esphome/
+
+# Secrets — ne jamais committer
+secrets.yaml
+**/secrets.yaml
