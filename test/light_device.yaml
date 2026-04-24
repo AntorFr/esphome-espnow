@@ -1,8 +1,8 @@
 substitutions:
   device_name: light-device
-  # MAC address of the button ESP32 (sender).
-  # Run `esphome logs button_device.yaml` and look for "WiFi MAC Address: xx:xx:xx:xx:xx:xx"
-  button_mac: "11:22:33:44:55:66"
+  # MAC addresses of the button ESP32 senders.
+  button_mac_1: "11:22:33:44:55:66"
+  button_mac_2: "11:22:33:44:55:77"
 
 esphome:
   name: ${device_name}
@@ -33,20 +33,31 @@ external_components:
       path: ../components
     components: [espnow_receiver]
 
-# ── Light output ───────────────────────────────────────────────────────────────
+# ── Outputs ────────────────────────────────────────────────────────────────────
 output:
   - platform: ledc
-    id: light_output
+    id: light_output_1
     pin: GPIO2
+  - platform: ledc
+    id: light_output_2
+    pin: GPIO4
 
+# ── Lights ────────────────────────────────────────────────────────────────────
 light:
   - platform: monochromatic
-    id: my_light
-    name: "Light"
-    output: light_output
+    id: my_light_1
+    name: "Light 1"
+    output: light_output_1
+  - platform: monochromatic
+    id: my_light_2
+    name: "Light 2"
+    output: light_output_2
 
-# ── ESP-NOW receiver ───────────────────────────────────────────────────────────
+# ── ESP-NOW receivers (multi-instance) ────────────────────────────────────────
 espnow_receiver:
-  id: espnow_rx
-  peer_mac: ${button_mac}   # only accept packets from this MAC
-  light_id: my_light
+  - id: espnow_rx_1
+    peer_mac: ${button_mac_1}
+    light_id: my_light_1
+  - id: espnow_rx_2
+    peer_mac: ${button_mac_2}
+    light_id: my_light_2

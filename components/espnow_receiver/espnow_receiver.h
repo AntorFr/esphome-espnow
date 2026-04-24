@@ -31,10 +31,16 @@ class ESPNowReceiverComponent : public Component {
   void set_peer_mac(std::vector<uint8_t> mac) { peer_mac_ = mac; }
   void set_light(light::LightState *light) { light_ = light; }
 
+  /// Returns true if src matches the configured peer MAC.
+  bool matches_peer(const uint8_t *src) const {
+    return peer_mac_.size() == 6 && memcmp(peer_mac_.data(), src, 6) == 0;
+  }
+
+  QueueHandle_t recv_queue_{nullptr};
+
  protected:
   std::vector<uint8_t> peer_mac_;
   light::LightState *light_{nullptr};
-  QueueHandle_t recv_queue_{nullptr};
 };
 
 }  // namespace espnow_receiver

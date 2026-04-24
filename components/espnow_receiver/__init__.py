@@ -7,6 +7,8 @@ CODEOWNERS = ["@esphome-espnow"]
 
 DEPENDENCIES = ["wifi"]
 
+MULTI_CONF = True
+
 espnow_receiver_ns = cg.esphome_ns.namespace("espnow_receiver")
 ESPNowReceiverComponent = espnow_receiver_ns.class_(
     "ESPNowReceiverComponent", cg.Component
